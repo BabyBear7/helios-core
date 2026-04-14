@@ -97,6 +97,9 @@ async function checkSrv(hostname: string): Promise<SrvRecord | null> {
         return records.length > 0 ? records[0] : null
     } catch(err) {
         const code = (err as NodeJS.ErrnoException).code
+        // Retry public resolvers only when the local resolver appears unreachable.
+        // DNS response codes such as ESERVFAIL/EREFUSED are treated as valid resolver
+        // outcomes (including policy responses) and should not trigger a bypass.
         if (code == null || !SRV_RESOLVER_FAILURE_CODES.has(code)) {
             return null
         }
