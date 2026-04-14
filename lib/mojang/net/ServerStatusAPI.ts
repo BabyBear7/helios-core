@@ -1,5 +1,5 @@
 import { SrvRecord } from 'dns'
-import { resolveSrv } from 'dns/promises'
+import { Resolver, resolveSrv } from 'dns/promises'
 import { connect } from 'net'
 import { LoggerUtil } from '../../util/LoggerUtil'
 import { ServerBoundPacket, ClientBoundPacket, ProtocolUtils } from './Protocol'
@@ -83,12 +83,35 @@ function unifyStatusResponse(resp: ServerStatus): ServerStatus {
     return resp
 }
 
+const SRV_RESOLVER_FAILURE_CODES = new Set([
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'ETIMEOUT',
+    'ETIMEDOUT'
+])
+
 async function checkSrv(hostname: string): Promise<SrvRecord | null> {
+    const query = `_minecraft._tcp.${hostname}`
     try {
-        const records = await resolveSrv(`_minecraft._tcp.${hostname}`)
+        const records = await resolveSrv(query)
         return records.length > 0 ? records[0] : null
     } catch(err) {
-        return null
+        const code = (err as NodeJS.ErrnoException).code
+        // Retry public resolvers only when the local resolver appears unreachable.
+        // DNS response codes such as ESERVFAIL/EREFUSED are treated as valid resolver
+        // outcomes (including policy responses) and should not trigger a bypass.
+        if (code == null || !SRV_RESOLVER_FAILURE_CODES.has(code)) {
+            return null
+        }
+        logger.warn(`System SRV lookup failed with ${code}, retrying via public resolver.`)
+        try {
+            const resolver = new Resolver()
+            resolver.setServers(['1.1.1.1', '8.8.8.8'])
+            const records = await resolver.resolveSrv(query)
+            return records.length > 0 ? records[0] : null
+        } catch {
+            return null
+        }
     }
 }
 
