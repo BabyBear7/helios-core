@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "cross-env TS_NODE_PROJECT='./tsconfig.test.json' NODE_ENV=test mocha -r ts-node/register --recursive test/**/**/*.ts",
     "bl": "npm run build && npm link",
+    "prepare": "npm run build",
     "prepack": "npm run build"
   },
   "exports": {
